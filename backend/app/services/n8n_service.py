@@ -1,4 +1,5 @@
 # backend/app/services/n8n_service.py
+import json
 import httpx
 import logging
 from typing import Any, Optional
@@ -29,21 +30,41 @@ class N8NService:
             return response.json()
 
     def _normalize_response(self, raw: Any, task_id: str, agent: str) -> dict[str, Any]:
-        if isinstance(raw, list) and len(raw) > 0:
+        if isinstance(raw, list):
+            if not raw:
+                raise ValueError("n8n webhook returned an empty response.")
             raw = raw[0]
+        if not isinstance(raw, dict):
+            raise ValueError("n8n webhook response must be a JSON object.")
+        if isinstance(raw.get("json"), dict):
+            raw = raw["json"]
+
+        output = raw.get("output")
+        if isinstance(output, dict):
+            raw = {**raw, **output}
+        elif isinstance(output, str):
+            try:
+                parsed_output = json.loads(output)
+            except json.JSONDecodeError:
+                parsed_output = None
+            if isinstance(parsed_output, dict):
+                raw = {**raw, **parsed_output}
+        if not raw:
+            raise ValueError("n8n webhook returned an empty JSON object.")
+
         return {
             "success": raw.get("success", True),
             "task_id": raw.get("task_id", task_id),
             "agent": raw.get("agent", agent),
             "workflow": raw.get("workflow", agent),
             "status": raw.get("status", "completed"),
-            "classification": raw.get("classification"),
-            "message": raw.get("message", ""),
+            "classification": raw.get("classification", raw.get("category")),
+            "message": raw.get("message", raw.get("response", output if isinstance(output, str) else "")),
             "actions": raw.get("actions", []),
             "requires_approval": raw.get("requires_approval", False),
             "confidence": raw.get("confidence"),
             "execution_time": raw.get("execution_time"),
-            "recommendation": raw.get("recommendation"),
+            "recommendation": raw.get("recommendation", raw.get("classification")),
             "generated_content": raw.get("generated_content"),
         }
 

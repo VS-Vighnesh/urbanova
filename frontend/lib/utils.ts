@@ -11,6 +11,10 @@ export function formatINR(amount: number): string {
 
 export const formatCurrency = formatINR;
 
+export function safeReturnPath(value: string | null): string {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
 export function formatDate(dateString?: string | null): string {
   if (!dateString) return "—";
   const date = new Date(dateString);

@@ -1,6 +1,7 @@
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 const TOKEN_KEY = "urbanova_token";
 const CART_SESSION_KEY = "urbanova_cart_session";
+export const CART_UPDATED_EVENT = "urbanova:cart-updated";
 
 export class ApiError extends Error {
   status: number;
@@ -49,6 +50,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
           ? body
           : `Request failed (${response.status})`;
     throw new ApiError(detail, response.status);
+  }
+  if (
+    path.startsWith("/api/cart") &&
+    (init.method || "GET").toUpperCase() !== "GET" &&
+    typeof window !== "undefined"
+  ) {
+    window.dispatchEvent(new Event(CART_UPDATED_EVENT));
   }
   return body as T;
 }

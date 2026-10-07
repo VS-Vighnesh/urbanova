@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, RotateCw, Search } from "lucide-react";
+import { ArrowUpRight, Play, RotateCw, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency, formatDate, humanize } from "@/lib/utils";
 import StatusBadge from "@/components/admin/StatusBadge";
@@ -41,6 +41,7 @@ export default function AdminResourcePage({
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [actionError, setActionError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const [busyId, setBusyId] = useState("");
 
   const reload = useCallback(async () => {
@@ -95,6 +96,7 @@ export default function AdminResourcePage({
     const id = String(row.id || "");
     if (!id) return;
     setActionError("");
+    setActionMessage("");
     setBusyId(id);
     try {
       if (actionType === "approval") {
@@ -117,6 +119,23 @@ export default function AdminResourcePage({
     }
   }
 
+  async function runLeadWorkflow(row: Row) {
+    const id = String(row.id || "");
+    if (!id) return;
+    setActionError("");
+    setActionMessage("");
+    setBusyId(id);
+    try {
+      await apiFetch(`/api/leads/${id}/run`, { method: "POST" });
+      setActionMessage(`Sales workflow completed for ${String(row.lead_name || row.name || "this lead")}.`);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Unable to run the Sales workflow.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   function renderAction(row: Row) {
     const id = String(row.id || "");
     if (actionType === "product") return <Link className="table-link" href={`/admin/products/${id}/edit`}>Edit <ArrowUpRight size={14} /></Link>;
@@ -124,7 +143,7 @@ export default function AdminResourcePage({
     if (actionType === "task") return <Link className="table-link" href={`/admin/tasks/${id}`}>Details <ArrowUpRight size={14} /></Link>;
     if (actionType === "approval") return <div className="table-actions"><button className="button button-small" disabled={busyId === id} onClick={() => void performAction(row, "approve")}>Approve</button><button className="button button-small button-quiet" disabled={busyId === id} onClick={() => void performAction(row, "reject")}>Reject</button></div>;
     if (actionType === "support") return <button className="button button-small button-quiet" disabled={busyId === id || String(row.status) === "RESOLVED"} onClick={() => void performAction(row, "resolve")}>{String(row.status) === "RESOLVED" ? "Resolved" : "Resolve"}</button>;
-    if (actionType === "lead") return <select className="table-select" aria-label="Update lead status" value={String(row.status || "NEW")} disabled={busyId === id} onChange={(event) => void performAction(row, event.target.value)}>{["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "LOST"].map((status) => <option key={status} value={status}>{humanize(status)}</option>)}</select>;
+    if (actionType === "lead") return <div className="table-actions"><select className="table-select" aria-label="Update lead status" value={String(row.status || "NEW")} disabled={busyId === id} onChange={(event) => void performAction(row, event.target.value)}>{["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "LOST"].map((status) => <option key={status} value={status}>{humanize(status)}</option>)}</select><button className="button button-small button-quiet" aria-label="Run Sales workflow for lead" title="Run Sales workflow" disabled={busyId === id} onClick={() => void runLeadWorkflow(row)}><Play size={13} /> Run</button></div>;
     if (actionType === "order") return <select className="table-select" aria-label="Update fulfillment status" value={String(row.fulfillment_status || "CONFIRMED")} disabled={busyId === id} onChange={(event) => void performAction(row, event.target.value)}>{["CONFIRMED", "PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"].map((status) => <option key={status} value={status}>{humanize(status)}</option>)}</select>;
     return null;
   }
@@ -141,6 +160,7 @@ export default function AdminResourcePage({
       </div>
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {actionError && <div className="notice notice-error" role="alert">{actionError}</div>}
+      {actionMessage && <div className="notice notice-success" role="status">{actionMessage}</div>}
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}{actionType && <th>Actions</th>}</tr></thead>

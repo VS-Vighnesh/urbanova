@@ -11,10 +11,7 @@ from dotenv import load_dotenv
 import uuid
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
-
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://urbanova:urbanova_password_2025@localhost:5432/urbanova_db")
-
-from app.database import Base
+from app.database import Base, ensure_lead_tracking_schema
 from app.models.user import User, UserRole
 from app.models.product import Product, Category
 from app.models.customer import Customer, CustomerStatus
@@ -28,20 +25,47 @@ from app.models.invoice import Invoice, InvoiceStatus
 from app.models.approval import Approval, ApprovalType, ApprovalStatus
 from app.utils.auth import hash_password
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://urbanova:urbanova_password_2025@localhost:5432/urbanova_db")
+
 fake = Faker("en_IN")
 engine = create_engine(DATABASE_URL)
 Base.metadata.create_all(bind=engine)
+ensure_lead_tracking_schema()
 db = sessionmaker(bind=engine)()
 
 print("🌱 Seeding Urbanova database...")
 
 # Users
-db.add_all([
-    User(name="Alex Sharma", email="owner@urbanova.demo", password_hash=hash_password("demo1234"), role=UserRole.ADMIN),
-    User(name="Priya Mehta",  email="customer@urbanova.demo", password_hash=hash_password("demo1234"), role=UserRole.CUSTOMER),
-])
+demo_password_hash = hash_password("demo1234")
+seed_users = [
+    ("Alex Sharma", "owner@urbanova.demo", UserRole.ADMIN),
+    ("Priya Mehta", "customer@urbanova.demo", UserRole.CUSTOMER),
+    ("Aarav Khanna", "demo.customer01@urbanova.demo", UserRole.CUSTOMER),
+    ("Ananya Iyer", "demo.customer02@urbanova.demo", UserRole.CUSTOMER),
+    ("Kabir Nair", "demo.customer03@urbanova.demo", UserRole.CUSTOMER),
+    ("Diya Kapoor", "demo.customer04@urbanova.demo", UserRole.CUSTOMER),
+    ("Rohan Das", "demo.customer05@urbanova.demo", UserRole.CUSTOMER),
+    ("Meera Joshi", "demo.customer06@urbanova.demo", UserRole.CUSTOMER),
+    ("Arjun Rao", "demo.customer07@urbanova.demo", UserRole.CUSTOMER),
+    ("Sana Khan", "demo.customer08@urbanova.demo", UserRole.CUSTOMER),
+    ("Ishaan Patel", "demo.customer09@urbanova.demo", UserRole.CUSTOMER),
+    ("Aditi Menon", "demo.customer10@urbanova.demo", UserRole.CUSTOMER),
+    ("Dev Malhotra", "demo.customer11@urbanova.demo", UserRole.CUSTOMER),
+    ("Tara Shah", "demo.customer12@urbanova.demo", UserRole.CUSTOMER),
+    ("Neil Verma", "demo.customer13@urbanova.demo", UserRole.CUSTOMER),
+    ("Pooja Reddy", "demo.customer14@urbanova.demo", UserRole.CUSTOMER),
+    ("Zoya Sethi", "demo.customer15@urbanova.demo", UserRole.CUSTOMER),
+]
+for name, email, role in seed_users:
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        db.add(User(name=name, email=email, password_hash=demo_password_hash, role=role))
+    else:
+        user.name = name
+        user.password_hash = demo_password_hash
+        user.role = role
 db.commit()
-print("✅ Users")
+print("✅ 17 demo users (owner, customer, and 15 additional shoppers)")
 
 # Categories
 for name, slug in [("Men","men"),("Women","women"),("Accessories","accessories"),("New Arrivals","new-arrivals")]:
@@ -68,6 +92,7 @@ for name, slug, price, orig, cat, rating, cnt in [
                    stock=random.randint(10,200),
                    description=f"Premium quality {name.replace('Urbanova ','').lower()} for everyday style."))
 db.commit()
+product_names = [p.name for p in db.query(Product).all()]
 print("✅ Products")
 
 # Customers
@@ -92,14 +117,57 @@ db.commit()
 print("✅ 60 Orders")
 
 # Leads
-for _ in range(50):
-    db.add(Lead(name=fake.name(), email=fake.email(), phone=fake.phone_number(),
-                source=random.choice(["website","instagram","referral","google_ad"]),
-                classification=random.choice(list(LeadClassification)),
-                confidence=round(random.uniform(0.55,0.98),2),
-                score=round(random.uniform(30,98),1), status=random.choice(list(LeadStatus))))
+# One deterministic lead matching the exact sales-tracking example, so you can
+# verify GET /api/leads shows real visit_count / browsed_products / user_intent_notes
+# immediately after seeding, without having to click through the site first.
+jane_visited_at = datetime.utcnow() - timedelta(days=3)
+jane = db.query(Lead).filter(Lead.email == "jane@acme.com").first()
+if jane is None:
+    jane = Lead(name="Jane Smith", email="jane@acme.com")
+    db.add(jane)
+jane.name = "Jane Smith"
+jane.phone = jane.phone or fake.phone_number()
+jane.source = "website_tracking"
+jane.classification = LeadClassification.READY_TO_BUY
+jane.confidence = 0.91
+jane.score = 91.0
+jane.status = LeadStatus.NEW
+jane.visit_count = 5
+jane.order_click_count = 2
+jane.browsed_products = ["Noise-Cancelling Headphones Pro", "Mechanical Keyboard"]
+jane.first_visited_at = jane_visited_at
+jane.last_visited_at = datetime.utcnow() - timedelta(hours=4)
+jane.user_intent_notes = "Visited product page 5 times in 3 days, clicked Order twice."
+
+# 49 more leads with randomized (but plausible) visit-tracking data
+for _ in range(49):
+    visit_count = random.randint(0, 8)
+    order_clicks = random.randint(0, min(visit_count, 3))
+    first_visit = datetime.utcnow() - timedelta(days=random.randint(0, 14))
+    last_visit = first_visit + timedelta(days=random.randint(0, 5)) if visit_count else None
+    browsed = random.sample(product_names, k=min(random.randint(0, 3), len(product_names))) if visit_count else []
+
+    notes = None
+    if visit_count:
+        days = max(1, (last_visit - first_visit).days) if last_visit else 1
+        notes = f"Visited product page {visit_count} time{'s' if visit_count != 1 else ''} in {days} day{'s' if days != 1 else ''}."
+        if order_clicks:
+            notes += f" Clicked Order {order_clicks} time{'s' if order_clicks != 1 else ''}."
+
+    db.add(Lead(
+        name=fake.name(), email=fake.email(), phone=fake.phone_number(),
+        source=random.choice(["website","instagram","referral","google_ad","website_tracking"]),
+        classification=random.choice(list(LeadClassification)),
+        confidence=round(random.uniform(0.55,0.98),2),
+        score=round(random.uniform(30,98),1), status=random.choice(list(LeadStatus)),
+        visit_count=visit_count, order_click_count=order_clicks,
+        browsed_products=browsed,
+        first_visited_at=first_visit if visit_count else None,
+        last_visited_at=last_visit,
+        user_intent_notes=notes,
+    ))
 db.commit()
-print("✅ 50 Leads")
+print("✅ 50 Leads (including a deterministic Jane Smith example)")
 
 # Tickets
 for i in range(35):
@@ -121,14 +189,13 @@ for name, slug, desc in [
     ("Business AI Orchestrator","orchestrator","Coordinates business requests and routes them to specialized AI agents."),
     ("Customer Support Agent","customer_support","Handles customer requests, complaints and support communication."),
     ("Sales & Leads Agent","sales","Classifies leads, prioritizes opportunities and coordinates follow-ups."),
-    ("Marketing Agent","marketing","Generates and coordinates email and social campaigns."),
     ("HR Agent","hr","Assists with candidate screening and interview workflows."),
     ("Invoice Agent","invoice","Processes and organizes invoice-related business operations."),
 ]:
     db.add(Agent(name=name, slug=slug, description=desc, status=AgentStatus.ACTIVE, workflow_name=slug))
 db.commit()
-slugs = [a.slug for a in db.query(Agent).all()]
-print("✅ 6 Agents")
+slugs = [a.slug for a in db.query(Agent).filter(Agent.slug != "marketing").all()]
+print("✅ 5 Agents (marketing excluded from the website demo)")
 
 # Tasks
 for _ in range(100):
@@ -188,18 +255,18 @@ print("✅ 30 Invoices")
 
 # Approvals
 for atype, title, agent in [
-    (ApprovalType.MARKETING_CAMPAIGN, "Weekend sale email campaign — awaiting review", "marketing"),
     (ApprovalType.HR_CANDIDATE, "Candidate Rahul Sharma — SHORTLIST recommended (92%)", "hr"),
-    (ApprovalType.MARKETING_CAMPAIGN, "New arrivals social post pending approval", "marketing"),
     (ApprovalType.HR_CANDIDATE, "Senior developer candidate awaiting decision", "hr"),
 ]:
     db.add(Approval(type=atype, title=title, requested_by_agent=agent, status=ApprovalStatus.PENDING, entity_type="demo"))
 db.commit()
-print("✅ 4 Pending Approvals")
+print("✅ 2 Pending Approvals")
 
 db.close()
 print("\n🎉 Database seeded!")
 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-print("👤  Owner:    owner@urbanova.demo / demo1234")
-print("🛍️   Customer: customer@urbanova.demo / demo1234")
+print("👤  Admin:    owner@urbanova.demo / demo1234")
+print("🛍️   Shopper: customer@urbanova.demo / demo1234")
+print("🛍️   15 additional shoppers: demo.customer01@urbanova.demo–demo.customer15@urbanova.demo / demo1234")
+print("🎯  Sales demo lead: jane@acme.com (visit_count=5, READY_TO_BUY)")
 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Heart, Minus, Plus, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
 import type { Product } from "@/types";
 import { productImageFor } from "@/lib/productImages";
 import { useWishlist } from "@/context/WishlistContext";
+import { useAuth } from "@/context/AuthContext";
+import { trackOrderClick, trackProductView } from "@/lib/lead_Tracking";
 
 interface ProductDetails extends Product {
   related?: Product[];
@@ -18,6 +20,8 @@ interface ProductDetails extends Product {
 export default function ProductPage() {
   const params = useParams<{ id: string }>();
   const { isSaved, toggle } = useWishlist();
+  const { user } = useAuth();
+  const trackedProductId = useRef("");
   const [product, setProduct] = useState<ProductDetails | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [loadedId, setLoadedId] = useState("");
@@ -36,8 +40,18 @@ export default function ProductPage() {
       .finally(() => setLoadedId(params.id));
   }, [params.id]);
 
+  useEffect(() => {
+    if (!user?.name || !user.email || !product) return;
+    if (trackedProductId.current === product.id) return;
+    trackedProductId.current = product.id;
+    void trackProductView(product.name);
+  }, [user, product]);
+
   async function addToBag() {
     if (!product) return;
+    if (user?.name && user.email) {
+      void trackOrderClick();
+    }
     setBusy(true);
     setError("");
     setMessage("");

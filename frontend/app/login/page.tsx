@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { safeReturnPath } from "@/lib/utils";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
+  const next = searchParams.get("next");
+  const registerHref = next ? `/register?next=${encodeURIComponent(next)}` : "/register";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +23,7 @@ function LoginForm() {
     setSubmitting(true);
     try {
       await login({ email, password });
-      router.replace(searchParams.get("next") || "/");
+      router.replace(safeReturnPath(searchParams.get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
@@ -33,13 +36,16 @@ function LoginForm() {
       <aside className="auth-aside"><h2>Come on in.<br />Your good things are waiting.</h2><p>Sign in to see your orders, save your favourites and make checkout a little quicker next time.</p></aside>
       <section className="auth-panel">
         <p className="eyebrow">Welcome back</p><h1>Sign in</h1><p>Use your Urbanova account details to continue.</p>
+        <div className="notice notice-success" role="note">
+          Demo admin: <strong>owner@urbanova.demo</strong> / <strong>demo1234</strong>
+        </div>
         <form className="form-stack" onSubmit={submit}>
           {error && <div className="notice notice-error" role="alert">{error}</div>}
           <label className="input-label">Email address<input className="input-control" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label className="input-label">Password<input className="input-control" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           <button className="button button-full" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
         </form>
-        <div className="auth-foot">New to Urbanova? <Link href="/register">Create an account</Link></div>
+        <div className="auth-foot">New to Urbanova? <Link href={registerHref}>Create an account</Link></div>
       </section>
     </div>
   );

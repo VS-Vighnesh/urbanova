@@ -21,7 +21,7 @@ class Decision(BaseModel):
 
 @router.get("")
 async def list_approvals(status: Optional[str] = None, db: Session = Depends(get_db), current_user=Depends(require_admin)):
-    q = db.query(Approval)
+    q = db.query(Approval).filter(Approval.type != ApprovalType.MARKETING_CAMPAIGN)
     if status:
         q = q.filter(Approval.status == status)
     items = q.order_by(Approval.created_at.desc()).all()

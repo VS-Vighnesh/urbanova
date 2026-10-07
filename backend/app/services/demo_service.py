@@ -3,6 +3,7 @@
 Must NEVER be mistaken for the real thing in production — see main.py startup warning below."""
 import asyncio
 import random
+import re
 from typing import Any
 
 
@@ -18,8 +19,6 @@ class DemoService:
             agent = "customer_support"
         elif any(w in m for w in ["lead", "sales", "buy", "customer interest"]):
             agent = "sales"
-        elif any(w in m for w in ["campaign", "marketing", "email", "social"]):
-            agent = "marketing"
         elif any(w in m for w in ["candidate", "resume", "hire", "interview", "hr"]):
             agent = "hr"
         elif any(w in m for w in ["invoice", "vendor", "payment", "bill"]):
@@ -131,8 +130,20 @@ class DemoService:
                 "response": r["message"], "confidence": r["confidence"]}
 
     async def classify_lead(self, notes: str, source: str) -> dict:
-        r = await self.sales_response({"notes": notes, "source": source}, task_id="demo")
-        return {"classification": r["classification"], "confidence": r["confidence"], "score": round(r["confidence"] * 100, 1)}
+        await self.simulate_delay()
+        visits = re.search(r"visited product page (\d+)", notes.lower())
+        visit_count = int(visits.group(1)) if visits else 0
+        if "clicked order" in notes.lower() or visit_count >= 5:
+            classification, confidence = "READY_TO_BUY", 0.91
+        elif visit_count >= 3:
+            classification, confidence = "NEEDS_CALL", 0.78
+        else:
+            classification, confidence = "EARLY_INTEREST", 0.65
+        return {
+            "classification": classification,
+            "confidence": confidence,
+            "score": round(confidence * 100, 1),
+        }
 
 
 demo_service = DemoService()

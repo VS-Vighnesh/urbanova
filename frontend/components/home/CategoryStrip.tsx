@@ -13,21 +13,19 @@ const TILES = [
 
 export default function CategoryStrip() {
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+    <section className="home-category-strip" aria-label="Shop by category">
+      <div className="home-category-list">
         {TILES.map(tile => (
-          <Link key={tile.label} href={tile.href} className="group block">
-            <div className="aspect-[4/3] lg:aspect-[3/4] rounded-xl overflow-hidden bg-gray-100">
+          <Link key={tile.label} href={tile.href} className="home-category-tile">
+            <span className="home-category-image">
               <Image
                 src={tile.image}
                 alt={tile.label}
-                width={600}
-                height={800}
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                fill
+                sizes="(max-width: 640px) 74px, 92px"
               />
-            </div>
-            <p className="text-sm font-medium text-gray-900 mt-2 text-center">{tile.label}</p>
+            </span>
+            <span>{tile.label}</span>
           </Link>
         ))}
       </div>

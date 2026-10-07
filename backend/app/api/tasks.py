@@ -1,7 +1,7 @@
 # backend/app/api/tasks.py
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -89,16 +89,29 @@ async def _run_orchestrator(task_id: str, db_url: str):
             execution.status = "FAILED"
             execution.error = str(exc)
             execution.execution_time = round(time.time() - started, 2)
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now(timezone.utc)
             task.status = ExecutionStatus.FAILED
             task.result = {"error": str(exc), "workflow": "Business_Orchestrator"}
+            db.commit()
+            return
+
+        if result.get("success") is False:
+            failure_message = result.get("message") or "The orchestrator reported a workflow failure."
+            execution.status = ExecutionStatus.FAILED
+            execution.error = failure_message
+            execution.output = result
+            execution.execution_time = round(time.time() - started, 2)
+            execution.completed_at = datetime.now(timezone.utc)
+            task.status = ExecutionStatus.FAILED
+            task.result = result
+            task.completed_at = datetime.now(timezone.utc)
             db.commit()
             return
 
         execution.status = "COMPLETED"
         execution.output = result
         execution.execution_time = result.get("execution_time") or round(time.time() - started, 2)
-        execution.completed_at = datetime.utcnow()
+        execution.completed_at = datetime.now(timezone.utc)
 
         task.agent_slug = result.get("agent")
         task.confidence = result.get("confidence")

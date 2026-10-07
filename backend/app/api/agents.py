@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 async def list_agents(db: Session = Depends(get_db), current_user=Depends(require_admin)):
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     result = []
-    for a in db.query(Agent).all():
+    for a in db.query(Agent).filter(Agent.slug != "marketing").all():
         tasks_today = db.query(func.count(Task.id)).filter(Task.agent_slug == a.slug, Task.created_at >= today).scalar()
         completed = db.query(func.count(Task.id)).filter(Task.agent_slug == a.slug, Task.status == ExecutionStatus.COMPLETED).scalar()
         total = db.query(func.count(Task.id)).filter(Task.agent_slug == a.slug).scalar()

@@ -20,6 +20,7 @@ const categoryImages: Record<string, string> = {
   men: "/images/hero/men.jpg",
   women: "/images/hero/women.jpg",
   accessories: "/images/hero/accessories.jpg",
+  "new-arrivals": "/images/hero/new-arrivals.jpg",
   "best-sellers": "/images/hero/best-sellers.jpg",
 };
 
@@ -29,8 +30,10 @@ function CatalogContent({ initialCategory }: { initialCategory: string }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const category = selectedCategory || searchParams.get("category") || initialCategory;
+  const searchParam = searchParams.get("search") || "";
   const [sort, setSort] = useState("newest");
-  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const [searchState, setSearchState] = useState(() => ({ routeValue: searchParam, value: searchParam }));
+  const search = searchState.routeValue === searchParam ? searchState.value : searchParam;
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -92,7 +95,7 @@ function CatalogContent({ initialCategory }: { initialCategory: string }) {
   function clearFilters() {
     setLoading(true);
     setSelectedCategory("all");
-    setSearch("");
+    setSearchState({ routeValue: searchParam, value: "" });
     setMinPrice("");
     setMaxPrice("");
     setInStockOnly(false);
@@ -105,13 +108,17 @@ function CatalogContent({ initialCategory }: { initialCategory: string }) {
         <div className="collection-hero">
           <Image src={categoryImage} alt="" fill priority sizes="100vw" />
           <div className="collection-hero-shade" />
-          <h1>{categoryLabel}</h1>
+          <div className="collection-hero-copy">
+            <p>THE URBANOVA COLLECTION</p>
+            <h1>{categoryLabel}</h1>
+            <span>Modern essentials, thoughtfully chosen for every day.</span>
+          </div>
         </div>
       )}
       <div className="catalog-topbar">
         <label className="catalog-search">
           <span className="sr-only">Search products</span>
-          <input value={search} onChange={(event) => { setLoading(true); setSearch(event.target.value); }} placeholder="Search products…" />
+          <input value={search} onChange={(event) => { setLoading(true); setSearchState({ routeValue: searchParam, value: event.target.value }); }} placeholder="Search products…" />
         </label>
         <span className="catalog-count">{loading ? "Finding your next favourite…" : `${products.length} ${products.length === 1 ? "product" : "products"}`}</span>
         <label className="catalog-sort">Sort by

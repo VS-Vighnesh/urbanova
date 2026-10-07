@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, clearToken, hasToken, saveToken } from "@/lib/api";
+import { ApiError, apiFetch, clearToken, hasToken, saveToken } from "@/lib/api";
 import type { User } from "@/types";
 
 interface Credentials {
@@ -24,6 +24,7 @@ interface Registration extends Credentials {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
+  sessionError: string | null;
   login: (credentials: Credentials) => Promise<void>;
   register: (input: Registration) => Promise<void>;
   logout: () => void;
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -49,11 +51,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return apiFetch<User>("/api/auth/me")
         .then((currentUser) => {
-          if (active) setUser(currentUser);
+          if (active) {
+            setUser(currentUser);
+            setSessionError(null);
+          }
         })
-        .catch(() => {
-          clearToken();
-          if (active) setUser(null);
+        .catch((error: unknown) => {
+          if (!active) return;
+          setUser(null);
+          if (error instanceof ApiError && error.status === 401) {
+            clearToken();
+            setSessionError("Your session has expired. Please sign in again.");
+            return;
+          }
+          setSessionError(error instanceof Error ? error.message : "Unable to verify your session.");
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -71,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     saveToken(result.access_token);
     setUser(result.user);
+    setSessionError(null);
   }, []);
 
   const login = useCallback(
@@ -84,9 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
+    setSessionError(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, register, logout }), [user, loading, login, register, logout]);
+  const value = useMemo(
+    () => ({ user, loading, sessionError, login, register, logout }),
+    [user, loading, sessionError, login, register, logout],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

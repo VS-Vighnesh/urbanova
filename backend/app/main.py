@@ -3,11 +3,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
+from app.database import Base, engine, ensure_lead_tracking_schema
 from app.config import get_settings
 from app.api import (
     auth, dashboard, agents, tasks, approvals, admin_orders,
-    products, customers, cart, orders,
+    products, customers, cart, orders, hr, invoices, workflows,
     support, leads,
 )
 
@@ -19,6 +19,7 @@ logger = logging.getLogger("urbanova")
 # AgentExecution, etc. alongside the rest, since SQLAlchemy only creates tables
 # for models it has actually seen)
 Base.metadata.create_all(bind=engine)
+ensure_lead_tracking_schema()
 
 app = FastAPI(
     title="Urbanova API",
@@ -57,6 +58,9 @@ app.include_router(orders.router)
 app.include_router(admin_orders.router)
 app.include_router(support.router)
 app.include_router(leads.router)
+app.include_router(hr.router)
+app.include_router(invoices.router)
+app.include_router(workflows.router)
 
 
 @app.get("/api/health")
@@ -64,5 +68,14 @@ async def health():
     return {
         "status": "ok",
         "demo_mode": settings.DEMO_MODE,
-        "n8n_connected": bool(settings.N8N_BASE_URL and not settings.DEMO_MODE),
+        "n8n_connected": bool(
+            not settings.DEMO_MODE
+            and any((
+                settings.N8N_ORCHESTRATOR_WEBHOOK,
+                settings.N8N_SUPPORT_WEBHOOK,
+                settings.N8N_SALES_WEBHOOK,
+                settings.N8N_HR_WEBHOOK,
+                settings.N8N_INVOICE_WEBHOOK,
+            ))
+        ),
     }

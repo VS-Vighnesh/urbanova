@@ -1,7 +1,7 @@
 # backend/app/api/support.py
 import random
 import string
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -32,16 +32,18 @@ async def submit_ticket(body: SupportSubmitRequest, db: Session = Depends(get_db
     if settings.DEMO_MODE:
         ai_result = await demo_service.classify_support_request(body.message, body.customer_email)
     else:
-        ai_result = await n8n_service.trigger_customer_support(
+        workflow_result = await n8n_service.trigger_customer_support(
             task_id="TKT-" + str(random.randint(100000, 999999)),
             message=body.message,
             customer_email=body.customer_email,
         )
+        if workflow_result.get("success") is False:
+            raise HTTPException(status_code=502, detail="The customer support workflow could not process this message.")
         ai_result = {
-            "category": ai_result.get("classification", "GENERAL"),
-            "priority": "HIGH" if ai_result.get("classification") == "URGENT" else "MEDIUM",
-            "response": ai_result.get("message", ""),
-            "confidence": ai_result.get("confidence"),
+            "category": workflow_result.get("classification", "GENERAL"),
+            "priority": "HIGH" if workflow_result.get("classification") == "URGENT" else "MEDIUM",
+            "response": workflow_result.get("message", ""),
+            "confidence": workflow_result.get("confidence"),
         }
 
     ticket = Ticket(
