@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     N8N_HR_WEBHOOK: str = ""
     N8N_INVOICE_WEBHOOK: str = ""
 
+    # Support email delivery (Gmail SMTP supports an app password)
+    SUPPORT_EMAIL: str = "holahoal3311@gmail.com"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_SSL: bool = False
+
     class Config:
         env_file = ".env"
         extra = "ignore"

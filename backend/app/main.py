@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.api import (
     auth, dashboard, agents, tasks, approvals, admin_orders,
     products, customers, cart, orders, hr, invoices, workflows,
-    support, leads,
+    support, leads, careers,
 )
 
 settings = get_settings()
@@ -57,6 +57,7 @@ app.include_router(cart.router)
 app.include_router(orders.router)
 app.include_router(admin_orders.router)
 app.include_router(support.router)
+app.include_router(careers.router)
 app.include_router(leads.router)
 app.include_router(hr.router)
 app.include_router(invoices.router)

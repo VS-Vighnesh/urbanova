@@ -1,182 +1,199 @@
 "use client";
 
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { ApiError, apiFetch } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
+import { apiFetch, ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
-import type { Cart, PriceQuote } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import type { CartDTO, PriceQuote, ShippingAddress } from "@/types";
 
-interface CheckoutValues {
-  full_name: string;
-  phone: string;
-  line1: string;
-  city: string;
-  state: string;
-  pincode: string;
+type PaymentMethod = "SIMULATED_CARD" | "SIMULATED_FAILURE" | "COD";
+
+type CheckoutForm = ShippingAddress & {
+  customer_name: string;
   customer_email: string;
-}
+};
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [cart, setCart] = useState<Cart | null>(null);
-  const [values, setValues] = useState<CheckoutValues>({ full_name: "", phone: "", line1: "", city: "", state: "", pincode: "", customer_email: "" });
-  const [error, setError] = useState("");
+  const [cart, setCart] = useState<CartDTO | null>(null);
+  const [quote, setQuote] = useState<PriceQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [quote, setQuote] = useState<PriceQuote | null>(null);
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [couponInput, setCouponInput] = useState("");
-  const [couponError, setCouponError] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"SIMULATED_CARD" | "SIMULATED_FAILURE" | "COD">("SIMULATED_CARD");
+  const [error, setError] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("SIMULATED_CARD");
+  const [form, setForm] = useState<CheckoutForm>({
+    customer_name: "",
+    customer_email: "",
+    full_name: "",
+    phone: "",
+    line1: "",
+    city: "",
+    state: "",
+    pincode: "",
+  });
 
   useEffect(() => {
     let active = true;
-    apiFetch<Cart>("/api/cart")
-      .then(async (data) => {
-        if (active) setCart(data);
-        if (!data.items.length) return null;
-        return apiFetch<PriceQuote>("/api/orders/quote", { method: "POST" });
-      })
-      .then((price) => {
-        if (active && price) setQuote(price);
-      })
-      .catch((err: Error) => {
-        if (active) setError(err.message);
-      })
-      .finally(() => {
+    async function loadCheckout() {
+      try {
+        const data = await apiFetch<CartDTO>("/api/cart");
+        if (!active) return;
+        if (!data.items.length) {
+          router.replace("/cart");
+          return;
+        }
+        setCart(data);
+        const savedCode = window.sessionStorage.getItem("appliedCoupon") || "";
+        setCouponCode(savedCode);
+        const query = savedCode ? `?coupon_code=${encodeURIComponent(savedCode)}` : "";
+        const pricing = await apiFetch<PriceQuote>(`/api/orders/quote${query}`, { method: "POST" });
+        if (active) setQuote(pricing);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Unable to load checkout.");
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
+    void loadCheckout();
     return () => {
       active = false;
     };
-  }, []);
+  }, [router]);
 
-  function update(field: keyof CheckoutValues, value: string) {
-    setValues((current) => ({ ...current, [field]: value }));
+  function updateField(event: ChangeEvent<HTMLInputElement>) {
+    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function applyCoupon(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    if (!quote) {
-      setError("We couldn't verify the order total. Refresh pricing before placing your order.");
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    setCouponMessage("");
+    try {
+      const pricing = await apiFetch<PriceQuote>(
+        `/api/orders/quote?coupon_code=${encodeURIComponent(code)}`,
+        { method: "POST" },
+      );
+      setQuote(pricing);
+      setCouponCode(code);
+      window.sessionStorage.setItem("appliedCoupon", code);
+      setCouponMessage(`Coupon ${code} applied.`);
+      setError("");
+    } catch (err) {
+      setCouponMessage(err instanceof ApiError ? err.message : "Unable to apply this discount code.");
+    }
+  }
+
+  async function removeCoupon() {
+    window.sessionStorage.removeItem("appliedCoupon");
+    setCouponCode("");
+    setCouponMessage("Discount code removed.");
+    try {
+      setQuote(await apiFetch<PriceQuote>("/api/orders/quote", { method: "POST" }));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to refresh your order total.");
+    }
+  }
+
+  async function placeOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!cart?.items.length || !quote) {
+      setError("Your cart or order total is not ready yet. Please return to your cart and try again.");
       return;
     }
     setSubmitting(true);
+    setError("");
     try {
       const result = await apiFetch<{ order_number: string }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           shipping_address: {
-            full_name: values.full_name,
-            phone: values.phone,
-            line1: values.line1,
-            city: values.city,
-            state: values.state,
-            pincode: values.pincode,
+            full_name: form.full_name,
+            phone: form.phone,
+            line1: form.line1,
+            city: form.city,
+            state: form.state,
+            pincode: form.pincode,
           },
-          ...(user ? {} : { customer_name: values.full_name, customer_email: values.customer_email }),
+          customer_name: form.customer_name || user?.name,
+          customer_email: form.customer_email || user?.email,
           payment_method: paymentMethod,
-          coupon_code: quote.coupon_code,
+          coupon_code: quote.coupon_code || undefined,
         }),
       });
+      window.sessionStorage.removeItem("appliedCoupon");
       router.push(`/checkout/success?order=${encodeURIComponent(result.order_number)}`);
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to place your order.";
+      setError(message);
       if (err instanceof ApiError && err.status === 402) {
-        router.push(`/checkout/failure?reason=${encodeURIComponent(err.message)}`);
-        return;
+        setPaymentMethod("SIMULATED_FAILURE");
       }
-      setError(err instanceof Error ? err.message : "Unable to place your order.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function applyCoupon(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCouponError("");
-    setPricingLoading(true);
-    try {
-      const params = new URLSearchParams({ coupon_code: couponInput.trim() });
-      setQuote(await apiFetch<PriceQuote>(`/api/orders/quote?${params}`, { method: "POST" }));
-    } catch (err) {
-      setCouponError(err instanceof Error ? err.message : "Unable to apply this code.");
-    } finally {
-      setPricingLoading(false);
-    }
-  }
-
-  async function removeCoupon() {
-    setCouponError("");
-    setCouponInput("");
-    setPricingLoading(true);
-    try {
-      setQuote(await apiFetch<PriceQuote>("/api/orders/quote", { method: "POST" }));
-    } catch (err) {
-      setCouponError(err instanceof Error ? err.message : "Unable to refresh your total.");
-    } finally {
-      setPricingLoading(false);
-    }
-  }
-
-  async function refreshPricing() {
-    setError("");
-    setPricingLoading(true);
-    try {
-      setQuote(await apiFetch<PriceQuote>("/api/orders/quote", { method: "POST" }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to refresh your order total.");
-    } finally {
-      setPricingLoading(false);
-    }
-  }
-
-  if (loading) return <div className="page-loading">Preparing checkout…</div>;
-  if (!cart?.items.length) return <div className="page-shell"><div className="empty-state"><h2>Your bag is empty.</h2><p>Add something lovely before checking out.</p><Link className="button" href="/shop">Browse the collection</Link></div></div>;
+  if (loading) return <main className="page-shell"><p>Loading checkout…</p></main>;
 
   return (
-    <div className="page-shell">
-      <div className="page-heading"><p className="eyebrow">Almost yours</p><h1>Checkout<span className="brand-period">.</span></h1><p>Just the details we need to get your order to you.</p></div>
-      <div className="checkout-layout">
-        <form className="form-stack" onSubmit={submit}>
-          {error && <div className="notice notice-error" role="alert">{error}</div>}
-          <h2 className="form-title">Contact & delivery</h2>
-          {!user && <label className="input-label">Email address<input className="input-control" type="email" autoComplete="email" value={values.customer_email} onChange={(e) => update("customer_email", e.target.value)} required /></label>}
-          <div className="form-grid">
-            <label className="input-label">Full name<input className="input-control" autoComplete="name" value={values.full_name || user?.name || ""} onChange={(e) => update("full_name", e.target.value)} required /></label>
-            <label className="input-label">Phone number<input className="input-control" type="tel" autoComplete="tel" value={values.phone} onChange={(e) => update("phone", e.target.value)} required /></label>
-          </div>
-          <label className="input-label">Street address<input className="input-control" autoComplete="street-address" value={values.line1} onChange={(e) => update("line1", e.target.value)} required /></label>
-          <div className="form-grid">
-            <label className="input-label">City<input className="input-control" autoComplete="address-level2" value={values.city} onChange={(e) => update("city", e.target.value)} required /></label>
-            <label className="input-label">State<input className="input-control" autoComplete="address-level1" value={values.state} onChange={(e) => update("state", e.target.value)} required /></label>
-            <label className="input-label">PIN code<input className="input-control" inputMode="numeric" autoComplete="postal-code" value={values.pincode} onChange={(e) => update("pincode", e.target.value)} required /></label>
-          </div>
-          <fieldset className="payment-options">
-            <legend>Payment method</legend>
-            <label><input type="radio" name="payment" checked={paymentMethod === "SIMULATED_CARD"} onChange={() => setPaymentMethod("SIMULATED_CARD")} /><span><strong>Demo card · successful payment</strong><small>Test checkout only. No card details or real charge.</small></span></label>
-            <label><input type="radio" name="payment" checked={paymentMethod === "SIMULATED_FAILURE"} onChange={() => setPaymentMethod("SIMULATED_FAILURE")} /><span><strong>Demo card · declined payment</strong><small>Tests the failure screen and keeps your bag.</small></span></label>
-            <label><input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} /><span><strong>Cash on delivery</strong><small>Pay when your order arrives.</small></span></label>
-          </fieldset>
-          <p className="demo-payment-note">Demo checkout · No real payment will be taken or card details collected.</p>
-          <button className="button" disabled={submitting || pricingLoading || !quote}>{submitting ? "Placing your order…" : pricingLoading ? "Updating total…" : `Place order · ${quote ? formatCurrency(quote.total) : "Pricing unavailable"}`}</button>
-        </form>
-        <aside className="summary-card"><h2>Your order</h2>
-          {cart.items.map((item) => <div className="summary-row" key={item.id}><span>{item.product_name} × {item.quantity}</span><span>{formatCurrency(item.line_total)}</span></div>)}
-          <form className="coupon-form" onSubmit={applyCoupon}><label className="input-label">Discount code<input className="input-control" value={couponInput} onChange={(event) => setCouponInput(event.target.value)} placeholder="URBANOVA10" disabled={pricingLoading || Boolean(quote?.coupon_code)} /></label>{quote?.coupon_code ? <button className="button button-small button-quiet" type="button" onClick={removeCoupon} disabled={pricingLoading}>Remove</button> : <button className="button button-small button-quiet" type="submit" disabled={pricingLoading || !quote}>{pricingLoading ? "…" : "Apply"}</button>}</form>
-          {couponError && <p className="form-error" role="alert">{couponError}</p>}
-          <div className="summary-row"><span>Subtotal</span><span>{quote ? formatCurrency(quote.subtotal) : "Unavailable"}</span></div>
-          {quote?.coupon_code && <div className="summary-row summary-discount"><span>Discount · {quote.coupon_code}</span><span>−{formatCurrency(quote.discount)}</span></div>}
-          <div className="summary-row"><span>Shipping</span><span>{quote ? quote.shipping === 0 ? "Free" : formatCurrency(quote.shipping) : "Unavailable"}</span></div>
-          <div className="summary-row"><span>GST (5%)</span><span>{quote ? formatCurrency(quote.tax) : "Unavailable"}</span></div>
-          <div className="summary-row total"><span>Total</span><span>{quote ? formatCurrency(quote.total) : "Unavailable"}</span></div>
-          {!quote && <button className="button button-small button-quiet" type="button" onClick={refreshPricing} disabled={pricingLoading}>{pricingLoading ? "Refreshing…" : "Refresh pricing"}</button>}
-          <p className="secure-note">Free shipping over ₹999 · Prices include applicable sale discounts.</p>
-        </aside>
-      </div>
-    </div>
+    <main className="page-shell">
+      <div className="breadcrumbs"><Link href="/">Home</Link><span>/</span><Link href="/cart">Cart</Link><span>/</span><span>Checkout</span></div>
+      <p className="eyebrow">Almost yours</p>
+      <h1>Checkout</h1>
+      <p className="muted-copy">This is a simulated checkout. No real payment details or charges are involved.</p>
+      {error && <div className="notice notice-error" role="alert">{error}</div>}
+      {!cart?.items.length ? (
+        <div className="empty-state"><h2>Your cart is empty.</h2><Link className="button" href="/shop">Back to shopping</Link></div>
+      ) : (
+        <div className="checkout-layout">
+          <form className="form-stack" onSubmit={placeOrder}>
+            <section className="admin-form form-stack">
+              <h2>Contact and delivery</h2>
+              <label className="input-label">Name<input className="input-control" name="customer_name" required value={form.customer_name || user?.name || ""} onChange={updateField} /></label>
+              <label className="input-label">Email<input className="input-control" name="customer_email" type="email" required value={form.customer_email || user?.email || ""} onChange={updateField} /></label>
+              <label className="input-label">Full name for delivery<input className="input-control" name="full_name" required value={form.full_name || user?.name || ""} onChange={updateField} /></label>
+              <label className="input-label">Phone<input className="input-control" name="phone" type="tel" required value={form.phone} onChange={updateField} /></label>
+              <label className="input-label">Address<input className="input-control" name="line1" required value={form.line1} onChange={updateField} /></label>
+              <div className="form-grid">
+                <label className="input-label">City<input className="input-control" name="city" required value={form.city} onChange={updateField} /></label>
+                <label className="input-label">State<input className="input-control" name="state" required value={form.state} onChange={updateField} /></label>
+              </div>
+              <label className="input-label">Pincode<input className="input-control" name="pincode" required value={form.pincode} onChange={updateField} /></label>
+            </section>
+            <section className="admin-form form-stack">
+              <h2>Demo payment</h2>
+              <label className="flex gap-3 items-start"><input type="radio" name="payment" value="SIMULATED_CARD" checked={paymentMethod === "SIMULATED_CARD"} onChange={() => setPaymentMethod("SIMULATED_CARD")} /><span><strong>Simulated card payment</strong><small className="block">Completes the demo payment; no real charge is made.</small></span></label>
+              <label className="flex gap-3 items-start"><input type="radio" name="payment" value="SIMULATED_FAILURE" checked={paymentMethod === "SIMULATED_FAILURE"} onChange={() => setPaymentMethod("SIMULATED_FAILURE")} /><span><strong>Simulate a declined payment</strong><small className="block">Demonstrates a failed payment; the cart stays unchanged.</small></span></label>
+              <label className="flex gap-3 items-start"><input type="radio" name="payment" value="COD" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} /><span><strong>Cash on delivery</strong><small className="block">Creates the order without an online payment.</small></span></label>
+            </section>
+            <button className="button" type="submit" disabled={submitting || !quote}>{submitting ? "Placing order…" : "Place demo order"}</button>
+          </form>
+          <aside className="summary-card">
+            <h2>Order summary</h2>
+            {cart.items.map((item) => <div className="order-row" key={item.id}><span>{item.product_name}<small>Qty {item.quantity}</small></span><strong>{formatCurrency(item.line_total)}</strong></div>)}
+            <form className="form-stack mt-4" onSubmit={applyCoupon}>
+              <label className="input-label" htmlFor="checkout-coupon">Discount code</label>
+              <p className="text-sm">Demo code: URBANOVA10 for 10% off.</p>
+              <div className="flex gap-2"><input id="checkout-coupon" className="input-control" value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Enter code" /><button className="button button-light" type="submit">Apply</button></div>
+              {couponMessage && <p className="text-sm" role="status">{couponMessage}</p>}
+              {quote?.coupon_code && <button type="button" className="text-link" onClick={() => void removeCoupon()}>Remove applied discount</button>}
+            </form>
+            <div className="summary-row"><span>Subtotal</span><span>{formatCurrency(quote?.subtotal ?? cart.subtotal)}</span></div>
+            <div className="summary-row"><span>Discount</span><span>− {formatCurrency(quote?.discount ?? 0)}</span></div>
+            <div className="summary-row"><span>Shipping</span><span>{formatCurrency(quote?.shipping ?? 0)}</span></div>
+            <div className="summary-row"><span>Tax</span><span>{formatCurrency(quote?.tax ?? 0)}</span></div>
+            <div className="summary-row total"><span>Total</span><span>{quote ? formatCurrency(quote.total) : "Calculating…"}</span></div>
+            <Link className="text-link" href="/cart">Edit cart</Link>
+          </aside>
+        </div>
+      )}
+    </main>
   );
 }

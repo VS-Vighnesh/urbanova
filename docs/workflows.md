@@ -40,16 +40,21 @@ Use **Run** on a lead row to replay its stored payload through the Sales workflo
 ## Workflow connections
 
 The Workflows page includes the Multi-business orchestrator, Customer Support,
-Sales/Leads, HR screening, and Invoice processing. Marketing is intentionally omitted.
-Requests are saved in the database and results appear in the matching Candidates,
-Invoices, Leads, Support, or Tasks admin view.
+Sales/Leads, HR applications, and invoice authenticity verification. Marketing is
+intentionally omitted. HR applications open the provided n8n form at
+`http://localhost:5678/form/c0f7aee8-f416-4133-9034-57622ce28537`; invoice checks
+open `http://localhost:5678/form/0c201938-dc48-4a68-825d-1357bcfdff48`. The Careers
+page uses the same HR form. Keep n8n running and the forms active when demonstrating
+these links. Requests handled by the API appear in the matching Candidates, Invoices,
+Leads, Support, or Tasks admin view.
 The Gmail intake workflow is event-driven: it starts from the Gmail Trigger in n8n
 rather than from a storefront form, and is shown as an external n8n trigger in the
 workflow workspace. Keep that trigger active in n8n for inbox-driven processing.
 
-With the default `DEMO_MODE=true`, each workflow uses the local simulator. To send
-requests to n8n, set `DEMO_MODE=false` in the backend environment and configure the
-relevant server-side webhook URL:
+With the default `DEMO_MODE=true`, API-run workflows use the local simulator. HR
+applications and invoice authenticity checks open their n8n forms directly regardless
+of demo mode. To send API-run workflow requests to n8n, set `DEMO_MODE=false` in the
+backend environment and configure the relevant server-side webhook URL:
 
 | Workflow | Environment variable |
 | --- | --- |
@@ -63,3 +68,24 @@ Use the production webhook URLs for activated n8n workflows. Keep webhook URLs a
 `N8N_API_KEY` on the backend; do not expose them as `NEXT_PUBLIC_*` frontend variables.
 When lead activity triggers Sales, the payload uses `lead_name`, `lead_email`,
 `visit_count`, `browsed_products`, and `user_intent_notes`.
+
+## Support and application email
+
+The support form classifies and records each message, then sends the request to
+`holahoal3311@gmail.com` through the backend SMTP service. Add these settings to the
+root `.env` file before submitting support messages; for Gmail, use an app password
+instead of the account password:
+
+```dotenv
+SUPPORT_EMAIL=holahoal3311@gmail.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=holahoal3311@gmail.com
+SMTP_PASSWORD=your-gmail-app-password
+SMTP_FROM_EMAIL=holahoal3311@gmail.com
+SMTP_USE_SSL=false
+```
+
+The form reports an explicit delivery/configuration error and provides a direct
+`mailto:` fallback if SMTP is unavailable. Candidate applications are collected by
+the n8n HR form; applicants can alternatively email their resume to the same address.

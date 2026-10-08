@@ -1,25 +1,31 @@
 # backend/app/api/support.py
+import asyncio
+import logging
 import random
+import smtplib
 import string
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from app.database import get_db
 from app.models.ticket import Ticket, TicketStatus
 from app.config import get_settings
 from app.services.n8n_service import n8n_service
 from app.services.demo_service import demo_service
+from app.services.email_service import EmailConfigurationError, send_support_email
 from app.utils.auth import require_admin
 
 router = APIRouter(prefix="/api/support", tags=["support"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class SupportSubmitRequest(BaseModel):
-    message: str
+    name: str = Field(min_length=1, max_length=255)
+    message: str = Field(min_length=1, max_length=5000)
     customer_email: Optional[EmailStr] = None
-    subject: Optional[str] = None
+    subject: Optional[str] = Field(default=None, max_length=200)
 
 
 def _ticket_number() -> str:
@@ -50,7 +56,7 @@ async def submit_ticket(body: SupportSubmitRequest, db: Session = Depends(get_db
         ticket_number=_ticket_number(),
         customer_email=body.customer_email,
         subject=body.subject or body.message[:80],
-        message=body.message,
+        message=f"Name: {body.name}\n\n{body.message}",
         category=ai_result.get("category", "GENERAL"),
         priority=ai_result.get("priority", "MEDIUM"),
         ai_response=ai_result.get("response"),
@@ -60,10 +66,32 @@ async def submit_ticket(body: SupportSubmitRequest, db: Session = Depends(get_db
     db.commit()
     db.refresh(ticket)
 
+    try:
+        await asyncio.to_thread(
+            send_support_email,
+            customer_name=body.name,
+            customer_email=str(body.customer_email or ""),
+            subject=ticket.subject,
+            message=body.message,
+            ticket_number=ticket.ticket_number,
+            ai_response=ticket.ai_response or "",
+        )
+    except EmailConfigurationError as exc:
+        logger.error("Support email not sent for ticket %s: %s", ticket.ticket_number, exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (OSError, smtplib.SMTPException) as exc:
+        logger.exception("Unable to send support email for ticket %s", ticket.ticket_number)
+        raise HTTPException(
+            status_code=502,
+            detail="The support ticket was recorded, but the email could not be delivered. Please use the direct email link.",
+        ) from exc
+
     return {
         "ticket_number": ticket.ticket_number,
         "classification": ticket.category,
         "response": ticket.ai_response,
+        "email_sent": True,
+        "support_email": settings.SUPPORT_EMAIL,
     }
 
 

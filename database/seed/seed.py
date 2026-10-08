@@ -33,7 +33,7 @@ Base.metadata.create_all(bind=engine)
 ensure_lead_tracking_schema()
 db = sessionmaker(bind=engine)()
 
-print("🌱 Seeding Urbanova database...")
+print("Seeding Urbanova database...")
 
 # Users
 demo_password_hash = hash_password("demo1234")
@@ -65,7 +65,7 @@ for name, email, role in seed_users:
         user.password_hash = demo_password_hash
         user.role = role
 db.commit()
-print("✅ 17 demo users (owner, customer, and 15 additional shoppers)")
+print("17 demo users (owner, customer, and 15 additional shoppers)")
 
 # Categories
 for name, slug in [("Men","men"),("Women","women"),("Accessories","accessories"),("New Arrivals","new-arrivals")]:
@@ -93,7 +93,7 @@ for name, slug, price, orig, cat, rating, cnt in [
                    description=f"Premium quality {name.replace('Urbanova ','').lower()} for everyday style."))
 db.commit()
 product_names = [p.name for p in db.query(Product).all()]
-print("✅ Products")
+print("Products")
 
 # Customers
 for _ in range(100):
@@ -103,7 +103,7 @@ for _ in range(100):
                     last_order_at=datetime.utcnow()-timedelta(days=random.randint(1,180))))
 db.commit()
 cids = [c.id for c in db.query(Customer).all()]
-print("✅ 100 Customers")
+print("100 Customers")
 
 # Orders
 for i in range(60):
@@ -114,7 +114,7 @@ for i in range(60):
                  shipping_address={"city":fake.city(),"state":fake.state(),"pincode":fake.postcode()},
                  created_at=datetime.utcnow()-timedelta(days=random.randint(0,90))))
 db.commit()
-print("✅ 60 Orders")
+print("60 Orders")
 
 # Leads
 # One deterministic lead matching the exact sales-tracking example, so you can
@@ -167,7 +167,7 @@ for _ in range(49):
         user_intent_notes=notes,
     ))
 db.commit()
-print("✅ 50 Leads (including a deterministic Jane Smith example)")
+print("50 Leads (including a deterministic Jane Smith example)")
 
 # Tickets
 for i in range(35):
@@ -182,7 +182,7 @@ for i in range(35):
                   category=cat, priority=prio, status=random.choice(list(TicketStatus)),
                   ai_response="Thank you for contacting Urbanova. Your request has been received."))
 db.commit()
-print("✅ 35 Support Tickets")
+print("35 Support Tickets")
 
 # Agents
 for name, slug, desc in [
@@ -195,7 +195,7 @@ for name, slug, desc in [
     db.add(Agent(name=name, slug=slug, description=desc, status=AgentStatus.ACTIVE, workflow_name=slug))
 db.commit()
 slugs = [a.slug for a in db.query(Agent).filter(Agent.slug != "marketing").all()]
-print("✅ 5 Agents (marketing excluded from the website demo)")
+print("5 Agents (marketing excluded from the website demo)")
 
 # Tasks
 for _ in range(100):
@@ -216,7 +216,7 @@ for _ in range(100):
         execution_time=round(random.uniform(1.5,8.0),1),
     ))
 db.commit()
-print("✅ 100 Tasks")
+print("100 Tasks")
 
 # Campaigns
 for name in ["Weekend Flash Sale","New Arrivals Launch","Festive Season Campaign","Summer Essentials"]:
@@ -224,7 +224,7 @@ for name in ["Weekend Flash Sale","New Arrivals Launch","Festive Season Campaign
                     channel=random.choice(list(CampaignChannel)), tone="Friendly",
                     offer="20% off orders above ₹1499", status=random.choice(list(CampaignStatus))))
 db.commit()
-print("✅ Campaigns")
+print("Campaigns")
 
 # Candidates
 for _ in range(20):
@@ -239,7 +239,7 @@ for _ in range(20):
         status=random.choice(list(CandidateStatus))
     ))
 db.commit()
-print("✅ 20 Candidates")
+print("20 Candidates")
 
 # Invoices
 vendors = ["Textile Corp Ltd","Urban Fabrics Pvt","PrintMaster India","LogiShip Courier","CloudStore Services"]
@@ -251,7 +251,7 @@ for i in range(30):
                    status=random.choice(list(InvoiceStatus)),
                    ai_processed=str(random.choice([True,False])).lower()))
 db.commit()
-print("✅ 30 Invoices")
+print("30 Invoices")
 
 # Approvals
 for atype, title, agent in [
@@ -260,13 +260,13 @@ for atype, title, agent in [
 ]:
     db.add(Approval(type=atype, title=title, requested_by_agent=agent, status=ApprovalStatus.PENDING, entity_type="demo"))
 db.commit()
-print("✅ 2 Pending Approvals")
+print("2 Pending Approvals")
 
 db.close()
-print("\n🎉 Database seeded!")
-print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-print("👤  Admin:    owner@urbanova.demo / demo1234")
-print("🛍️   Shopper: customer@urbanova.demo / demo1234")
-print("🛍️   15 additional shoppers: demo.customer01@urbanova.demo–demo.customer15@urbanova.demo / demo1234")
-print("🎯  Sales demo lead: jane@acme.com (visit_count=5, READY_TO_BUY)")
-print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("\nDatabase seeded!")
+print("---------------------------------")
+print("Admin:    owner@urbanova.demo / demo1234")
+print("Shopper:  customer@urbanova.demo / demo1234")
+print("15 additional shoppers: demo.customer01@urbanova.demo to demo.customer15@urbanova.demo / demo1234")
+print("Sales demo lead: jane@acme.com (visit_count=5, READY_TO_BUY)")
+print("---------------------------------")

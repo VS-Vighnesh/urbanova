@@ -27,14 +27,14 @@ WORKFLOWS = (
     },
     {
         "slug": "hr",
-        "name": "HR candidate screening",
-        "description": "Reviews candidate skills and recommends a hiring next step.",
+        "name": "HR candidate applications",
+        "description": "Collects job applications through the n8n HR form for candidate screening.",
         "webhook_setting": "N8N_HR_WEBHOOK",
     },
     {
         "slug": "invoice",
-        "name": "Invoice processing",
-        "description": "Validates invoice details and records the finance result.",
+        "name": "Invoice authenticity verification",
+        "description": "Checks whether a submitted invoice is genuine or potentially fake.",
         "webhook_setting": "N8N_INVOICE_WEBHOOK",
     },
 )

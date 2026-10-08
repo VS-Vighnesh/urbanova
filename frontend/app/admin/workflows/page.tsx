@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiFetch } from "@/lib/api";
+import { HR_APPLICATION_FORM_URL, INVOICE_VERIFICATION_FORM_URL } from "@/lib/workflowForms";
 
 type WorkflowKey = "orchestrator" | "customer_support" | "sales" | "hr" | "invoice";
 type WorkflowInfo = {
@@ -82,6 +83,7 @@ export default function WorkflowsPage() {
         case "customer_support":
           endpoint = "/api/support/submit";
           body = {
+            name: form.name,
             customer_email: form.email || undefined,
             subject: form.subject || undefined,
             message: form.message,
@@ -173,6 +175,7 @@ export default function WorkflowsPage() {
         </>;
       case "customer_support":
         return <>
+          {field("name", "Your name", { required: true })}
           {field("email", "Customer email", { type: "email" })}
           {field("subject", "Subject")}
           {textArea("message", "Customer message", true)}
@@ -185,23 +188,9 @@ export default function WorkflowsPage() {
           {textArea("notes", "Lead context")}
         </>;
       case "hr":
-        return <>
-          {field("name", "Candidate name", { required: true })}
-          {field("email", "Candidate email", { type: "email", required: true })}
-          {field("position", "Position", { required: true })}
-          {field("skills", "Skills (comma separated)", { required: true })}
-          {field("experience_years", "Years of experience", { type: "number", required: true })}
-          {textArea("resume_text", "Resume notes")}
-        </>;
+        return <p className="muted-copy">Open the HR application form to submit a candidate profile. Applications are reviewed by the n8n HR screening workflow.</p>;
       case "invoice":
-        return <>
-          {field("invoice_number", "Invoice number", { required: true })}
-          {field("vendor_name", "Vendor name", { required: true })}
-          {field("vendor_email", "Vendor email", { type: "email" })}
-          {field("amount", "Amount", { type: "number", required: true })}
-          {field("due_date", "Due date", { type: "datetime-local" })}
-          {textArea("invoice_description", "Invoice description")}
-        </>;
+        return <p className="muted-copy">Submit an invoice to the n8n invoice agent to check whether it is genuine or potentially fake.</p>;
     }
   }
 
@@ -217,7 +206,7 @@ export default function WorkflowsPage() {
       {status && (
         <div className={`notice ${status.demo_mode ? "notice-success" : "notice-info"}`} role="status">
           {status.demo_mode
-            ? "Demo mode is on: workflow results are simulated and clearly marked in this workspace."
+            ? "Demo mode is on for API-run workflows. HR and invoice workflows open their connected n8n forms."
             : "Live mode is on: requests are sent to configured n8n webhooks."}
         </div>
       )}
@@ -232,7 +221,15 @@ export default function WorkflowsPage() {
           >
             <strong>{item.name}</strong>
             <span>{item.description}</span>
-            <small>{status.demo_mode ? "Demo simulator" : item.webhook_configured ? "n8n webhook configured" : "Webhook not configured"}</small>
+            <small>
+              {item.slug === "hr" || item.slug === "invoice"
+                ? "n8n form"
+                : status.demo_mode
+                  ? "Demo simulator"
+                  : item.webhook_configured
+                    ? "n8n webhook configured"
+                    : "Webhook not configured"}
+            </small>
           </button>
         ))}
         <div className="workflow-status-card workflow-status-card-external">
@@ -247,15 +244,24 @@ export default function WorkflowsPage() {
           <h2>Try it with sample data</h2>
           <p>{selectedWorkflow?.description}</p>
         </div>
-        <form className="admin-form form-stack" onSubmit={submit}>
-          {renderFields()}
-          <button className="button" disabled={submitting || loading || !selectedWorkflow?.available}>
-            {submitting ? "Running workflow…" : `Run ${selectedWorkflow?.name || "workflow"}`}
-          </button>
-          {!loading && selectedWorkflow && !selectedWorkflow.available && (
-            <p className="notice notice-error">Configure this workflow’s webhook in the backend environment before using live mode.</p>
-          )}
-        </form>
+        {workflow === "hr" || workflow === "invoice" ? (
+          <div className="admin-form form-stack">
+            {renderFields()}
+            <a className="button" href={workflow === "hr" ? HR_APPLICATION_FORM_URL : INVOICE_VERIFICATION_FORM_URL}>
+              {workflow === "hr" ? "Open HR application form" : "Check invoice authenticity"}
+            </a>
+          </div>
+        ) : (
+          <form className="admin-form form-stack" onSubmit={submit}>
+            {renderFields()}
+            <button className="button" disabled={submitting || loading || !selectedWorkflow?.available}>
+              {submitting ? "Running workflow…" : `Run ${selectedWorkflow?.name || "workflow"}`}
+            </button>
+            {!loading && selectedWorkflow && !selectedWorkflow.available && (
+              <p className="notice notice-error">Configure this workflow’s webhook in the backend environment before using live mode.</p>
+            )}
+          </form>
+        )}
         {result !== null && (
           <section className="workflow-result" aria-live="polite">
             <h3>Workflow response</h3>

@@ -89,6 +89,7 @@ const primaryLinks = [
   { href: "/new-arrivals", label: "New Arrivals" },
   { href: "/best-sellers", label: "Best Sellers" },
   { href: "/sale", label: "Sale", sale: true },
+  { href: "/careers", label: "Careers" },
 ];
 
 export default function Navbar() {
@@ -218,6 +219,7 @@ export default function Navbar() {
 
           <Link className="mobile-nav-link" href="/shop" onClick={closeMenus}>Shop everything</Link>
           <Link className="mobile-nav-link" href="/orders" onClick={closeMenus}>Track order</Link>
+          <Link className="mobile-nav-link" href="/careers" onClick={closeMenus}>Careers</Link>
           <Link className="mobile-nav-link" href="/support" onClick={closeMenus}>Support</Link>
           {user?.role && ["ADMIN", "MANAGER"].includes(user.role.toUpperCase()) && (
             <Link className="mobile-nav-link" href="/admin" onClick={closeMenus}>Admin</Link>

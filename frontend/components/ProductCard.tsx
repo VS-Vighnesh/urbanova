@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowUpRight, Heart, ShoppingCart, Star } from "lucide-react";
 import { useState } from "react";
 import { useWishlist } from "@/context/WishlistContext";
@@ -12,6 +13,7 @@ import { productImageFor } from "@/lib/productImages";
 const swatches = ["sage", "sand", "clay", "sky"];
 
 export default function ProductCard({ product, index = 0 }: { product: Product; index?: number }) {
+  const router = useRouter();
   const image = product.image_url || productImageFor(product.slug);
   const { isSaved, toggle } = useWishlist();
   const [busy, setBusy] = useState(false);
@@ -26,6 +28,7 @@ export default function ProductCard({ product, index = 0 }: { product: Product; 
         body: JSON.stringify({ product_id: product.id, quantity: 1 }),
       });
       setNotice("Added to bag");
+      router.push("/cart");
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not add to bag");
     } finally {

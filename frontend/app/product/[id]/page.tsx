@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Heart, Minus, Plus, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -19,6 +19,7 @@ interface ProductDetails extends Product {
 
 export default function ProductPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const { isSaved, toggle } = useWishlist();
   const { user } = useAuth();
   const trackedProductId = useRef("");
@@ -26,7 +27,6 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [loadedId, setLoadedId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -54,10 +54,9 @@ export default function ProductPage() {
     }
     setBusy(true);
     setError("");
-    setMessage("");
     try {
       await apiFetch("/api/cart/items", { method: "POST", body: JSON.stringify({ product_id: product.id, quantity }) });
-      setMessage("Added to your bag.");
+      router.push("/cart");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to add this item.");
     } finally {
@@ -90,7 +89,6 @@ export default function ProductPage() {
             <p className="product-description">{product.description || "A thoughtfully chosen piece for the everyday. Made to be useful, easy to live with, and loved for a long time."}</p>
             <p className="stock-note">{product.stock > 0 ? `${product.stock} ready to ship` : "Currently unavailable"}</p>
             {error && <div className="notice notice-error" role="alert">{error}</div>}
-            {message && <div className="notice notice-success" role="status">{message} <Link href="/cart">View bag</Link></div>}
             <div className="product-buy-row">
               <div className="quantity-control product-quantity">
                 <button aria-label="Decrease quantity" onClick={() => setQuantity((q) => Math.max(1, q - 1))}><Minus size={14} /></button>
